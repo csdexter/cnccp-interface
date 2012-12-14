@@ -2,16 +2,21 @@
 *.o
 
 # Libraries
-*.lib
 *.a
 
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
 # Executables
-*.exe
-*.out
-*.app
+*.elf
+*.hex
+
+# Linker Map files
+*.map
+
+# Assembler Listing files
+*.lst
+
+# Auto-generated dependency information
+*.d
+
+# Eclipse build folders
+Debug/*
+Release/*
