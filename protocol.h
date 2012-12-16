@@ -1,5 +1,5 @@
 /*
- * protocol.h - types pertaining to the secondary MCU wire protocol
+ * protocol.h - defines pertaining to the secondary MCU wire protocol
  *
  *  Created on: Nov 25, 2012
  *      Author: csdexter
@@ -11,18 +11,14 @@
 #include <stdint.h>
 
 
-typedef struct {
-  uint8_t WriteMode:1;
-  uint8_t DataMode:1;
-  uint8_t Command:6;
-} TCommandByte;
+#define PROTOCOL_WRITE 0x80
+#define PROTOCOL_DATA 0x40
+#define PROTOCOL_READ 0x00
+#define PROTOCOL_COMMAND 0x00
 
-typedef union {
-  uint16_t AsWord;
-  struct {
-    uint8_t HighByte;
-    uint8_t LowByte;
-  } AsBytes;
-} TWireWord;
+#define PROTOCOL_RCOMM (PROTOCOL_READ | PROTOCOL_COMMAND)
+#define PROTOCOL_RDATA (PROTOCOL_READ | PROTOCOL_DATA)
+#define PROTOCOL_WCOMM (PROTOCOL_WRITE | PROTOCOL_COMMAND)
+#define PROTOCOL_WDATA (PROTOCOL_WRITE | PROTOCOL_DATA)
 
 #endif /* PROTOCOL_H_ */

@@ -18,11 +18,37 @@
 
 #include "boilerplate.h"
 #include "interface.h"
+#include "protocol.h"
 #include "spi.h"
 
 
+volatile bool NewCommand;
 volatile uint8_t SPIBuf[2];
-volatile TInterruptFlags InterruptFlags;
+volatile TInterruptFlags InterruptFlags, InterruptCauses;
+volatile TOutputStatus Outputs;
+volatile TCrossbarStatus Crossbar;
+volatile uint8_t SpindlePWM;
+
+
+ISR(PCINT0_vect) {
+  if(PINB & _BV(PORTB4)) {
+    NewCommand = true;
+    spi_enable(SPI_OFF);
+  } else {
+    spi_enable(SPI_ON);
+    spi_start(&SPIBuf[0], &SPIBuf[1]);
+  }
+}
+
+ISR(INT0_vect) {
+  if(PIND & _BV(PORTD2)) SetFlagAndAssertInterrupt(_BV(INTERFACE_INTERRUPT_ESTOPCLEAR));
+  else {
+    SetFlagAndAssertInterrupt(_BV(INTERFACE_INTERRUPT_ESTOPTRIP));
+    if(InterruptFlags.flags.AutoEStop) {
+      /* FreezeTheWorld */
+    }
+  }
+}
 
 void SPI_Hook(bool when) {
   if(when == SPI_HOOK_BEFORE) SPIBuf[1] = SPIBuf[0];
@@ -30,11 +56,13 @@ void SPI_Hook(bool when) {
 }
 
 void SetFlagAndAssertInterrupt(uint8_t flag) {
+  InterruptCauses.value |= flag;
   if(InterruptFlags.flags.GlobalEnable && (InterruptFlags.value & flag))
     PORTD &= ~_BV(PORTD3);
 }
 
 void ClearFlagsAndReleaseInterrupt(void) {
+  InterruptCauses.value = 0;
   PORTD |= _BV(PORTD3);
 }
 
@@ -50,7 +78,7 @@ void init(void) {
   MCUCR |= _BV(ISC00);
   PCMSK2 = _BV(PCINT17);
   /* MOSI, MISO and SCK configured by SPI */
-  spi_configure(SPI_INT_ENABLE, SPI_ON, NULL, SPI_MASTER, NULL, SPI_PHASE_LEADING, NULL);
+  spi_configure(SPI_INT_ENABLE, SPI_ON, NULL, SPI_SLAVE, NULL, SPI_PHASE_LEADING, NULL);
   spi_hook = SPI_Hook;
   /* SS# on PB4, input and pin change interrupt
    * *_PWM on PB3/2, outputs
@@ -62,6 +90,9 @@ void init(void) {
   GIFR |= _BV(INTF0) | _BV(PCIF2) | _BV(PCIF0); /* Avoid spurious interrupts on startup */
   GIMSK |= _BV(INT0) | _BV(PCIE2) | _BV(PCIE0);
 
+  /* Initialize state */
+  NewCommand = false;
+
   /* And off we go */
   sei();
 }
@@ -70,7 +101,40 @@ int main(void) {
   init();
 
   while(true) {
-    /* Your code here */
+    if(NewCommand) {
+      NewCommand = false;
+        switch(SPIBuf[0]) {
+          case (INTERFACE_COMMAND_INTERRUPT | PROTOCOL_RCOMM):
+            SPIBuf[1] = InterruptFlags.value;
+            break;
+          case (INTERFACE_COMMAND_INTERRUPT | PROTOCOL_RDATA):
+            SPIBuf[1] = (InterruptCauses.flags.EStopTrip ? _BV(7) : 0) |
+                (InterruptCauses.flags.WatchDogTrip ? _BV(6) : 0);
+            ClearFlagsAndReleaseInterrupt();
+            break;
+          case (INTERFACE_COMMAND_INTERRUPT | PROTOCOL_WCOMM):
+            InterruptFlags.value = SPIBuf[0];
+            break;
+          case (INTERFACE_COMMAND_OUTPUT | PROTOCOL_RCOMM):
+            SPIBuf[1] = Outputs.value;
+            break;
+          case (INTERFACE_COMMAND_OUTPUT | PROTOCOL_WCOMM):
+            Outputs.value = SPIBuf[0];
+            break;
+          case (INTERFACE_COMMAND_CROSSBAR | PROTOCOL_RCOMM):
+            SPIBuf[1] = Crossbar.value;
+            break;
+          case (INTERFACE_COMMAND_CROSSBAR | PROTOCOL_WCOMM):
+            Crossbar.value = SPIBuf[0];
+            break;
+          case (INTERFACE_COMMAND_SPINDLE | PROTOCOL_RDATA):
+            SPIBuf[1] = SpindlePWM;
+            break;
+          case (INTERFACE_COMMAND_SPINDLE | PROTOCOL_WDATA):
+            SpindlePWM = SPIBuf[0];
+            break;
+        }
+    }
   }
 
   return 0;
