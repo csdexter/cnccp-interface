@@ -10,7 +10,12 @@
 
 #include <stdint.h>
 
-
+/* NOTE: no attempt has been made at making the PORT/PIN/DDR targets more
+ * portable or easily configurable by defining symbolic constants for our
+ * functions that would map to them in turn. This is by design: this is a low
+ * level interface and we are aiming for the most compact code. As a result,
+ * we do make assumptions about where our GPIOs are.
+ */
 #define INTERFACE_INTERRUPT_ESTOPTRIP 6
 #define INTERFACE_INTERRUPT_ESTOPCLEAR 5
 #define INTERFACE_INTERRUPT_WDOGTRIP 4
@@ -76,6 +81,12 @@ typedef union {
 void SetFlagAndAssertInterrupt(uint8_t flag);
 /* Called whenever the Read Last Interrupt Cause command is issued */
 void ClearFlagsAndReleaseInterrupt(void);
+/* Called whenever the output status changes */
+void UpdateOutputs(TOutputStatus newOutputs);
+/* Called whenever the crossbar switch's state changes */
+void UpdateSwitch(TCrossbarStatus newState);
+/* Called whenever the SPINDLE_PWM value changes */
+void UpdateSpindlePWM(uint8_t newSpindlePWM);
 
 
 #endif /* INTERFACE_H_ */

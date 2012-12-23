@@ -25,10 +25,10 @@
 volatile bool NewCommand;
 volatile uint8_t SPIBuf[2];
 volatile TInterruptFlags InterruptFlags, InterruptCauses;
-volatile TOutputStatus Outputs;
 volatile TCrossbarStatus Crossbar;
 volatile uint8_t SpindlePWM;
 
+TOutputStatus Outputs;
 
 ISR(PCINT0_vect) {
   if(PINB & _BV(PORTB4)) {
@@ -66,6 +66,23 @@ void ClearFlagsAndReleaseInterrupt(void) {
   PORTD |= _BV(PORTD3);
 }
 
+void UpdateOutputs(TOutputStatus newOutputs) {
+  PORTD = (PORTD & ~(_BV(PORTD4) | _BV(PORTD5))) | \
+      _BV(newOutputs.flags.Spindle ? PORTD4 : 0) | \
+      _BV(newOutputs.flags.Cool ? PORTD5 : 0);
+
+
+  Outputs = newOutputs;
+}
+
+void UpdateSwitch(TCrossbarStatus newState) {
+  ;
+}
+
+void UpdateSpindlePWM(uint8_t newSpindlePWM) {
+  ;
+}
+
 void init(void) {
   /* Setup GPIO ports */
   /* *_LED on PD0/1, outputs
@@ -78,7 +95,7 @@ void init(void) {
   MCUCR |= _BV(ISC00);
   PCMSK2 = _BV(PCINT17);
   /* MOSI, MISO and SCK configured by SPI */
-  spi_configure(SPI_INT_ENABLE, SPI_ON, NULL, SPI_SLAVE, NULL, SPI_PHASE_LEADING, NULL);
+  spi_configure(SPI_INT_ENABLE, SPI_OFF, NULL, SPI_SLAVE, NULL, SPI_PHASE_LEADING, NULL);
   spi_hook = SPI_Hook;
   /* SS# on PB4, input and pin change interrupt
    * *_PWM on PB3/2, outputs
@@ -119,19 +136,19 @@ int main(void) {
             SPIBuf[1] = Outputs.value;
             break;
           case (INTERFACE_COMMAND_OUTPUT | PROTOCOL_WCOMM):
-            Outputs.value = SPIBuf[0];
+            if(Outputs.value != SPIBuf[0]) UpdateOutputs((TOutputStatus)SPIBuf[0]);
             break;
           case (INTERFACE_COMMAND_CROSSBAR | PROTOCOL_RCOMM):
             SPIBuf[1] = Crossbar.value;
             break;
           case (INTERFACE_COMMAND_CROSSBAR | PROTOCOL_WCOMM):
-            Crossbar.value = SPIBuf[0];
+            if(Crossbar.value != SPIBuf[0]) UpdateSwitch((TCrossbarStatus)SPIBuf[0]);
             break;
           case (INTERFACE_COMMAND_SPINDLE | PROTOCOL_RDATA):
             SPIBuf[1] = SpindlePWM;
             break;
           case (INTERFACE_COMMAND_SPINDLE | PROTOCOL_WDATA):
-            SpindlePWM = SPIBuf[0];
+            if(SpindlePWM != SPIBuf[0]) UpdateSpindlePWM(SPIBuf[0]);
             break;
         }
     }

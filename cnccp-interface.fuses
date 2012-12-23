@@ -1,0 +1,12 @@
+MCU=attiny2313
+CKDIV8=0x1
+BODLEVEL=0x5
+SUT_CKSEL=0x24
+EESAVE=0x1
+SPIEN=0x0
+SELFPRGEN=0x1
+CKOUT=0x1
+WDTON=0x1
+RSTDISBL=0x1
+DWEN=0x1
+summary=Default configuration for use during development (i.e. still uses internal clock).
