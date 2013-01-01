@@ -1,12 +1,12 @@
 /*
  * main.c - Boilerplate AVR main/startup code
  *
- *  Created on: Dec 13, 2012
- *      Author: csdexter
- *
  * This is the Interface MCU firmware, it receives commands from the main MCU
  * via SPI and controls the crossbar switch, the master LEDs; generates the
  * SPINDLE, COOL and SPINDLE_PWM signals and monitors E-Stop.
+ *
+ *  Created on: Dec 13, 2012
+ *      Author: csdexter
  *
  */
 
@@ -28,8 +28,10 @@ volatile TInterruptFlags InterruptFlags, InterruptCauses;
 volatile TCrossbarStatus Crossbar;
 volatile uint8_t SpindlePWM;
 
+uint16_t WallClock;
 TOutputStatus Outputs;
 
+/* SPI SS# */
 ISR(PCINT0_vect) {
   if(PINB & _BV(PORTB4)) {
     NewCommand = true;
@@ -40,14 +42,28 @@ ISR(PCINT0_vect) {
   }
 }
 
+/* External WatchDog */
+ISR(PCINT2_vect) {
+  /* DetectWatchDogPeriod */
+}
+
+/* E-Stop */
 ISR(INT0_vect) {
-  if(PIND & _BV(PORTD2)) SetFlagAndAssertInterrupt(_BV(INTERFACE_INTERRUPT_ESTOPCLEAR));
+  if(PIND & _BV(PORTD2))
+    SetFlagAndAssertInterrupt(_BV(INTERFACE_INTERRUPT_ESTOPCLEAR));
   else {
     SetFlagAndAssertInterrupt(_BV(INTERFACE_INTERRUPT_ESTOPTRIP));
     if(InterruptFlags.flags.AutoEStop) {
       /* FreezeTheWorld */
     }
   }
+}
+
+/* SysTick */
+ISR(TIMER0_COMPB_vect) {
+  WallClock++;
+
+  RunPeriodicTasks();
 }
 
 void SPI_Hook(bool when) {
@@ -67,20 +83,59 @@ void ClearFlagsAndReleaseInterrupt(void) {
 }
 
 void UpdateOutputs(TOutputStatus newOutputs) {
-  PORTD = (PORTD & ~(_BV(PORTD4) | _BV(PORTD5))) | \
-      _BV(newOutputs.flags.Spindle ? PORTD4 : 0) | \
+  PORTD = (PORTD & ~(_BV(PORTD4) | _BV(PORTD5))) |
+      _BV((newOutputs.flags.Spindle ||
+          (newOutputs.flags.SpindleFollowsRPM && SpindlePWM)) ? PORTD4 : 0) |
       _BV(newOutputs.flags.Cool ? PORTD5 : 0);
-
+  if(newOutputs.flags.ChargePump != Outputs.flags.ChargePump)
+    SetChargePump(newOutputs.flags.ChargePump);
 
   Outputs = newOutputs;
 }
 
 void UpdateSwitch(TCrossbarStatus newState) {
-  ;
+  if(!(newState.flags.LPT && newState.flags.USB)) {
+    PORTB = (PORTB & ~(_BV(PORTB0) | _BV(PORTB1))) |
+    _BV(newState.flags.LPT ? PORTB0 : 0) | _BV(newState.flags.USB ? PORTB1 : 0);
+
+    Crossbar = newState;
+  }
 }
 
 void UpdateSpindlePWM(uint8_t newSpindlePWM) {
-  ;
+  if(newSpindlePWM <= 101) {
+    if(!newSpindlePWM) {
+      TCCR1A &= ~_BV(COM1A1);
+      PORTB &= ~_BV(PORTB3);
+    } else if(newSpindlePWM == 101) {
+      TCCR1A &= ~_BV(COM1A1);
+      PORTB |= _BV(PORTB3);
+    } else {
+      OCR1A = 0x03FFUL * newSpindlePWM / 100;
+      TCCR1A |= _BV(COM1A1);
+    }
+
+    if(Outputs.flags.SpindleFollowsRPM) UpdateOutputs(Outputs);
+
+    SpindlePWM = newSpindlePWM;
+  }
+}
+
+void SetChargePump(bool mode) {
+  if(mode) TCCR0B |= _BV(COM0A0);
+  else TCCR0B &= ~_BV(COM0A0);
+}
+
+void RunPeriodicTasks(void) {
+  /* We only use this for flashing LEDs right now, 1Hz and 4Hz */
+  if(Outputs.flags.LPTLED || Outputs.flags.USBLED) {
+    if((Outputs.flags.LPTLED == INTERFACE_LED_1HZ && !(WallClock & 0x3FFF)) ||
+        (Outputs.flags.LPTLED == INTERFACE_LED_4HZ && !(WallClock & 0x0FFF)))
+      PIND = _BV(PORTD0);
+    if((Outputs.flags.USBLED == INTERFACE_LED_1HZ && !(WallClock & 0x3FFF)) ||
+        (Outputs.flags.USBLED == INTERFACE_LED_4HZ && !(WallClock & 0x0FFF)))
+      PIND = _BV(PORTD1);
+  } /* Otherwise they're both off */
 }
 
 void init(void) {
@@ -103,9 +158,21 @@ void init(void) {
    */
   DDRB = (_BV(PORTB3) | _BV(PORTB2) | _BV(PORTB1) | _BV(PORTB0));
   PORTB = (_BV(PORTB1) | _BV(PORTB0));
+  /* Interrupt setup */
   PCMSK0 = _BV(PCINT4);
   GIFR |= _BV(INTF0) | _BV(PCIF2) | _BV(PCIF0); /* Avoid spurious interrupts on startup */
   GIMSK |= _BV(INT0) | _BV(PCIE2) | _BV(PCIE0);
+  /* Timer setup */
+  /* Timer0.A: CPUMP output @ 12.5kHz 50% square wave) */
+  TCCR0A = _BV(COM0A0) | _BV(WGM01);
+  OCR0A = F_CPU / 8 / (12500 * 2) - 1;
+  /* Timer0.B: SysTick @ 32768Hz */
+  OCR0B = F_CPU / 8 / 32768 - 1;
+  TIFR |= _BV(OCF0B); /* Avoid spurious interrupts on startup */
+  TIMSK |= _BV(OCIE0B);
+  TCCR0B = _BV(CS01);
+  /* Timer1.A: Phase-correct PWM */
+  TCCR1A = _BV(COM1A1) | _BV(WGM11) | _BV(WGM10);
 
   /* Initialize state */
   NewCommand = false;
@@ -136,13 +203,15 @@ int main(void) {
             SPIBuf[1] = Outputs.value;
             break;
           case (INTERFACE_COMMAND_OUTPUT | PROTOCOL_WCOMM):
-            if(Outputs.value != SPIBuf[0]) UpdateOutputs((TOutputStatus)SPIBuf[0]);
+            if(Outputs.value != SPIBuf[0])
+              UpdateOutputs((TOutputStatus)SPIBuf[0]);
             break;
           case (INTERFACE_COMMAND_CROSSBAR | PROTOCOL_RCOMM):
             SPIBuf[1] = Crossbar.value;
             break;
           case (INTERFACE_COMMAND_CROSSBAR | PROTOCOL_WCOMM):
-            if(Crossbar.value != SPIBuf[0]) UpdateSwitch((TCrossbarStatus)SPIBuf[0]);
+            if(Crossbar.value != SPIBuf[0])
+              UpdateSwitch((TCrossbarStatus)SPIBuf[0]);
             break;
           case (INTERFACE_COMMAND_SPINDLE | PROTOCOL_RDATA):
             SPIBuf[1] = SpindlePWM;

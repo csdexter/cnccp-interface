@@ -8,6 +8,7 @@
 #ifndef INTERFACE_H_
 #define INTERFACE_H_
 
+#include <stdbool.h>
 #include <stdint.h>
 
 /* NOTE: no attempt has been made at making the PORT/PIN/DDR targets more
@@ -24,6 +25,10 @@
 #define INTERFACE_COMMAND_OUTPUT 0x02
 #define INTERFACE_COMMAND_CROSSBAR 0x03
 #define INTERFACE_COMMAND_SPINDLE 0x04
+#define INTERFACE_LED_OFF 0x00
+#define INTERFACE_LED_ON 0x01
+#define INTERFACE_LED_1HZ 0x02
+#define INTERFACE_LED_4HZ 0x03
 
 #if defined(__AVR_ATtiny2313A__)
 /* avr-libc is lame enough not to have a fully orthogonal vocabulary */
@@ -39,6 +44,7 @@
 #define PCIF2 3
 #define PCMSK0 PCMSK
 #define PCINT0_vect PCINT_B_vect
+#define PCINT2_vect PCINT_D_vect
 #endif
 
 typedef union {
@@ -87,6 +93,10 @@ void UpdateOutputs(TOutputStatus newOutputs);
 void UpdateSwitch(TCrossbarStatus newState);
 /* Called whenever the SPINDLE_PWM value changes */
 void UpdateSpindlePWM(uint8_t newSpindlePWM);
-
+/* Called whenever the CPUMP status changes */
+void SetChargePump(bool mode);
+/* TODO: this may be globally needed, move to boilerplate.h */
+/* Runs things at prescribed intervals */
+void RunPeriodicTasks(void);
 
 #endif /* INTERFACE_H_ */
