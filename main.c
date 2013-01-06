@@ -164,7 +164,7 @@ void init(void) {
   GIMSK |= _BV(INT0) | _BV(PCIE2) | _BV(PCIE0);
   /* Timer setup */
   /* Timer0.A: CPUMP output @ 12.5kHz 50% square wave) */
-  TCCR0A = _BV(COM0A0) | _BV(WGM01);
+  TCCR0A = _BV(WGM01);
   OCR0A = F_CPU / 8 / (12500 * 2) - 1;
   /* Timer0.B: SysTick @ 32768Hz */
   OCR0B = F_CPU / 8 / 32768 - 1;
@@ -187,7 +187,30 @@ int main(void) {
   while(true) {
     if(NewCommand) {
       NewCommand = false;
-        switch(SPIBuf[0]) {
+        switch(SPIBuf[0]) { //TODO: index 0 is wrong, the whole byte-shifting needs reworking
+          //TODO: the implementation of the global commands could be generic enough to warrant moving to boilerplate
+          case (PROTOCOL_COMMAND_AYT | PROTOCOL_RCOMM):
+            SPIBuf[1] = _BV(PROTOCOL_C_AYT_YIA) |
+                (InterruptCauses.flags.EStopTrip ? 0 : _BV(PROTOCOL_C_AYT_ENVOK)) |
+                _BV(PROTOCOL_C_AYT_COMOK);
+            break;
+          case (PROTOCOL_COMMAND_AYT | PROTOCOL_RDATA):
+            SPIBuf[1] = 0xFF; /* We do not provide SYNC */
+            break;
+          case (PROTOCOL_COMMAND_AYT | PROTOCOL_WCOMM):
+            /* "only you" needs discussion as it's impossible to get right on a shared bus */
+            break;
+          case (PROTOCOL_COMMAND_AYT | PROTOCOL_WDATA):
+            break; /* We do not accept SYNC */
+          case (PROTOCOL_COMMAND_HLT | PROTOCOL_RCOMM):
+          case (PROTOCOL_COMMAND_HLT | PROTOCOL_RDATA):
+          case (PROTOCOL_COMMAND_HLT | PROTOCOL_WCOMM):
+            /* ShutDown */
+            break;
+          case (PROTOCOL_COMMAND_HLT | PROTOCOL_WDATA):
+            /* ImmediateHalt */
+            break;
+          //-- end global commands implementation --
           case (INTERFACE_COMMAND_INTERRUPT | PROTOCOL_RCOMM):
             SPIBuf[1] = InterruptFlags.value;
             break;

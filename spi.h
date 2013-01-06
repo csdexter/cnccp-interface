@@ -113,9 +113,9 @@ extern void(*spi_hook)(bool);
       else power_usi_disable()
   #define spi_interrupt(bState) USICR &= ~_BV(USIOIE) | (bState << USIOIE)
   #define spi_enable(bState) USICR &= ~(_BV(USIWM0) | _BV(USIWM1)) | (bState << USIWM0)
-  #define spi_endianness(bState) /* tiny84 is MSB first only */
+  #define spi_endianness(bState) /* USI is MSB first only */
   #define spi_mode(bState) USICR &= ~(_BV(USICS0) | _BV(USICS1)) | ((bState << USICS0) | (!bState << USICS1))
-  #define spi_polarity(bState) /* tiny84 does CPOL = 0 only */
+  #define spi_polarity(bState) /* USI does CPOL = 0 only */
   #define spi_phase(bState) USICR &= ~_BV(USICS0) | (bState << USICS0)
   #define spi_speed(ucFlags) /* USI has no internal clock */
   #define spi_read() USIBR
