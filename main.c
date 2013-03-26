@@ -70,7 +70,6 @@ ISR(INT0_vect) {
       Outputs.value = 0x00;
       Outputs.flags.LPTLED = INTERFACE_LED_4HZ;
       Outputs.flags.USBLED = INTERFACE_LED_4HZ;
-      //TODO: this will not call SetChargePump, fix!
       UpdateOutputs(Outputs);
     }
   }
@@ -104,8 +103,7 @@ void UpdateOutputs(TOutputStatus newOutputs) {
       _BV((newOutputs.flags.Spindle ||
           (newOutputs.flags.SpindleFollowsRPM && SpindlePWM)) ? PORTD4 : 0) |
       _BV(newOutputs.flags.Cool ? PORTD5 : 0);
-  if(newOutputs.flags.ChargePump != Outputs.flags.ChargePump)
-    SetChargePump(newOutputs.flags.ChargePump);
+  SetChargePump(newOutputs.flags.ChargePump);
 
   Outputs = newOutputs;
 }
@@ -206,9 +204,17 @@ int main(void) {
       NewCommand = false;
         switch(SPIBuf[0]) { //TODO: index 0 is wrong, the whole byte-shifting needs reworking
           //TODO: the implementation of the global commands could be generic enough to warrant moving to boilerplate
+          //-- begin global commands implementation --
           case PROTOCOL_COMMAND_MAC:
-          case PROTOCOL_COMMAND_WAY:
-            //TODO: add Master Control and Who Are You
+            //TODO: add Master Control
+            break;
+          case (PROTOCOL_COMMAND_WAY | PROTOCOL_RCOMM):
+            SPIBuf[1] = 0x00; /* I_2013-1.1-aaa */
+            //TODO: fix the SPI semantics mess and allow proper two-byte responses
+            //SPIBuf[1] = PROTOCOL_C_WAY_FI | 0x00;
+            break;
+          case (PROTOCOL_COMMAND_WAY | PROTOCOL_RDATA):
+            SPIBuf[1] = PROTOCOL_C_WAY_IS; /* Singleton, no indexing */
             break;
           case (PROTOCOL_COMMAND_AYT | PROTOCOL_RCOMM):
             SPIBuf[1] = _BV(PROTOCOL_C_AYT_YIA) |

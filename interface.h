@@ -95,7 +95,7 @@ void UpdateSwitch(TCrossbarStatus newState);
 void UpdateSpindlePWM(uint8_t newSpindlePWM);
 /* Called whenever the CPUMP status changes */
 void SetChargePump(bool mode);
-/* TODO: this may be globally needed, move to boilerplate.h */
+//TODO: this may be globally needed, move to boilerplate.h
 /* Runs things at prescribed intervals */
 void RunPeriodicTasks(void);
 
