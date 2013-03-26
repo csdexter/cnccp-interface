@@ -15,6 +15,7 @@
 
 #include <avr/interrupt.h>
 #include <avr/io.h>
+#include <avr/sleep.h>
 
 #include "boilerplate.h"
 #include "interface.h"
@@ -49,12 +50,28 @@ ISR(PCINT2_vect) {
 
 /* E-Stop */
 ISR(INT0_vect) {
-  if(PIND & _BV(PORTD2))
+  if(PIND & _BV(PORTD2)) {
     SetFlagAndAssertInterrupt(_BV(INTERFACE_INTERRUPT_ESTOPCLEAR));
-  else {
+    if(InterruptFlags.flags.AutoEStop) {
+      Outputs.value = 0;
+      Outputs.flags.ChargePump = true;
+      Outputs.flags.LPTLED = INTERFACE_LED_OFF;
+      Outputs.flags.USBLED = INTERFACE_LED_ON;
+      UpdateOutputs(Outputs);
+      Crossbar.flags.USB = true;
+      Crossbar.flags.LPT = false;
+      UpdateSwitch(Crossbar);
+    }
+  } else {
     SetFlagAndAssertInterrupt(_BV(INTERFACE_INTERRUPT_ESTOPTRIP));
     if(InterruptFlags.flags.AutoEStop) {
-      /* FreezeTheWorld */
+      Crossbar.value = 0x00;
+      UpdateSwitch(Crossbar);
+      Outputs.value = 0x00;
+      Outputs.flags.LPTLED = INTERFACE_LED_4HZ;
+      Outputs.flags.USBLED = INTERFACE_LED_4HZ;
+      //TODO: this will not call SetChargePump, fix!
+      UpdateOutputs(Outputs);
     }
   }
 }
@@ -96,7 +113,7 @@ void UpdateOutputs(TOutputStatus newOutputs) {
 void UpdateSwitch(TCrossbarStatus newState) {
   if(!(newState.flags.LPT && newState.flags.USB)) {
     PORTB = (PORTB & ~(_BV(PORTB0) | _BV(PORTB1))) |
-    _BV(newState.flags.LPT ? PORTB0 : 0) | _BV(newState.flags.USB ? PORTB1 : 0);
+    _BV(newState.flags.LPT ? 0 : PORTB0) | _BV(newState.flags.USB ? 0 : PORTB1);
 
     Crossbar = newState;
   }
@@ -189,6 +206,10 @@ int main(void) {
       NewCommand = false;
         switch(SPIBuf[0]) { //TODO: index 0 is wrong, the whole byte-shifting needs reworking
           //TODO: the implementation of the global commands could be generic enough to warrant moving to boilerplate
+          case PROTOCOL_COMMAND_MAC:
+          case PROTOCOL_COMMAND_WAY:
+            //TODO: add Master Control and Who Are You
+            break;
           case (PROTOCOL_COMMAND_AYT | PROTOCOL_RCOMM):
             SPIBuf[1] = _BV(PROTOCOL_C_AYT_YIA) |
                 (InterruptCauses.flags.EStopTrip ? 0 : _BV(PROTOCOL_C_AYT_ENVOK)) |
@@ -198,17 +219,33 @@ int main(void) {
             SPIBuf[1] = 0xFF; /* We do not provide SYNC */
             break;
           case (PROTOCOL_COMMAND_AYT | PROTOCOL_WCOMM):
-            /* "only you" needs discussion as it's impossible to get right on a shared bus */
+            //TODO: "only you" needs discussion as it's impossible to get right on a shared bus
             break;
           case (PROTOCOL_COMMAND_AYT | PROTOCOL_WDATA):
             break; /* We do not accept SYNC */
           case (PROTOCOL_COMMAND_HLT | PROTOCOL_RCOMM):
           case (PROTOCOL_COMMAND_HLT | PROTOCOL_RDATA):
           case (PROTOCOL_COMMAND_HLT | PROTOCOL_WCOMM):
-            /* ShutDown */
+            /* We do not intend to ever wake up */
+            cli();
+            /* Turn off SPINDLE and COOL */
+            Outputs.value = 0x00;
+            Outputs.flags.ChargePump = true;
+            UpdateOutputs(Outputs);
+            /* Turn off the stepper driver */
+            Outputs.flags.ChargePump = false;
+            UpdateOutputs(Outputs);
+            /* Isolate crossbar */
+            Crossbar.value = 0x00;
+            UpdateSwitch(Crossbar);
+            /* Shutdown */
+            set_sleep_mode(SLEEP_MODE_IDLE);
+            sleep_mode();
             break;
           case (PROTOCOL_COMMAND_HLT | PROTOCOL_WDATA):
-            /* ImmediateHalt */
+            cli();
+            set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+            sleep_mode();
             break;
           //-- end global commands implementation --
           case (INTERFACE_COMMAND_INTERRUPT | PROTOCOL_RCOMM):
