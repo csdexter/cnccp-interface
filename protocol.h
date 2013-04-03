@@ -39,4 +39,6 @@
 #define PROTOCOL_C_WAY_IS 0x00
 #define PROTOCOL_C_WAY_IN 0x08
 
+#define PROTOCOL_TRANSACTION_SIZE 3
+
 #endif /* PROTOCOL_H_ */

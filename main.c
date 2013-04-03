@@ -24,22 +24,26 @@
 
 
 volatile bool NewCommand;
-volatile uint8_t SPIBuf[2];
+volatile uint8_t SPIBuf[3], SPICount;
 volatile TInterruptFlags InterruptFlags, InterruptCauses;
 volatile TCrossbarStatus Crossbar;
 volatile uint8_t SpindlePWM;
+volatile
 
 uint16_t WallClock;
 TOutputStatus Outputs;
 
 /* SPI SS# */
 ISR(PCINT0_vect) {
+  SPICount = 0;
   if(PINB & _BV(PORTB4)) {
+    //TODO: in the future, we may want to error out if we haven't received exactly three bytes
     NewCommand = true;
     spi_enable(SPI_OFF);
   } else {
+    //TODO: in the future, we may want to error out if the last SPI transaction hasn't been processed yet
     spi_enable(SPI_ON);
-    spi_start(&SPIBuf[0], &SPIBuf[1]);
+    spi_start(&SPIBuf[0], &SPIBuf[0]);
   }
 }
 
@@ -83,8 +87,10 @@ ISR(TIMER0_COMPB_vect) {
 }
 
 void SPI_Hook(bool when) {
-  if(when == SPI_HOOK_BEFORE) SPIBuf[1] = SPIBuf[0];
-  else spi_start(&SPIBuf[0], &SPIBuf[1]);
+  if(when == SPI_HOOK_AFTER) {
+    SPICount = (SPICount < PROTOCOL_TRANSACTION_SIZE - 1) ? SPICount + 1 : 0;
+    spi_start(&SPIBuf[SPICount], &SPIBuf[SPICount]);
+  }
 }
 
 void SetFlagAndAssertInterrupt(uint8_t flag) {
@@ -202,7 +208,7 @@ int main(void) {
   while(true) {
     if(NewCommand) {
       NewCommand = false;
-        switch(SPIBuf[0]) { //TODO: index 0 is wrong, the whole byte-shifting needs reworking
+        switch(SPIBuf[0]) {
           //TODO: the implementation of the global commands could be generic enough to warrant moving to boilerplate
           //-- begin global commands implementation --
           case PROTOCOL_COMMAND_MAC:
@@ -210,8 +216,7 @@ int main(void) {
             break;
           case (PROTOCOL_COMMAND_WAY | PROTOCOL_RCOMM):
             SPIBuf[1] = 0x00; /* I_2013-1.1-aaa */
-            //TODO: fix the SPI semantics mess and allow proper two-byte responses
-            //SPIBuf[1] = PROTOCOL_C_WAY_FI | 0x00;
+            SPIBuf[2] = PROTOCOL_C_WAY_FI | 0x00; /* Interface MCU */
             break;
           case (PROTOCOL_COMMAND_WAY | PROTOCOL_RDATA):
             SPIBuf[1] = PROTOCOL_C_WAY_IS; /* Singleton, no indexing */
@@ -225,7 +230,7 @@ int main(void) {
             SPIBuf[1] = 0xFF; /* We do not provide SYNC */
             break;
           case (PROTOCOL_COMMAND_AYT | PROTOCOL_WCOMM):
-            //TODO: "only you" needs discussion as it's impossible to get right on a shared bus
+            //TODO: implement "only you"
             break;
           case (PROTOCOL_COMMAND_AYT | PROTOCOL_WDATA):
             break; /* We do not accept SYNC */
@@ -263,27 +268,27 @@ int main(void) {
             ClearFlagsAndReleaseInterrupt();
             break;
           case (INTERFACE_COMMAND_INTERRUPT | PROTOCOL_WCOMM):
-            InterruptFlags.value = SPIBuf[0];
+            InterruptFlags.value = SPIBuf[1];
             break;
           case (INTERFACE_COMMAND_OUTPUT | PROTOCOL_RCOMM):
             SPIBuf[1] = Outputs.value;
             break;
           case (INTERFACE_COMMAND_OUTPUT | PROTOCOL_WCOMM):
-            if(Outputs.value != SPIBuf[0])
-              UpdateOutputs((TOutputStatus)SPIBuf[0]);
+            if(Outputs.value != SPIBuf[1])
+              UpdateOutputs((TOutputStatus)SPIBuf[1]);
             break;
           case (INTERFACE_COMMAND_CROSSBAR | PROTOCOL_RCOMM):
             SPIBuf[1] = Crossbar.value;
             break;
           case (INTERFACE_COMMAND_CROSSBAR | PROTOCOL_WCOMM):
-            if(Crossbar.value != SPIBuf[0])
-              UpdateSwitch((TCrossbarStatus)SPIBuf[0]);
+            if(Crossbar.value != SPIBuf[1])
+              UpdateSwitch((TCrossbarStatus)SPIBuf[1]);
             break;
           case (INTERFACE_COMMAND_SPINDLE | PROTOCOL_RDATA):
             SPIBuf[1] = SpindlePWM;
             break;
           case (INTERFACE_COMMAND_SPINDLE | PROTOCOL_WDATA):
-            if(SpindlePWM != SPIBuf[0]) UpdateSpindlePWM(SPIBuf[0]);
+            if(SpindlePWM != SPIBuf[1]) UpdateSpindlePWM(SPIBuf[1]);
             break;
         }
     }
