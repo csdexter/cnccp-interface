@@ -23,12 +23,12 @@
 #include "spi.h"
 
 
-volatile bool NewCommand;
+volatile bool NewCommand, WDTDetect;
 volatile uint8_t SPIBuf[3], SPICount;
 volatile TInterruptFlags InterruptFlags, InterruptCauses;
 volatile TCrossbarStatus Crossbar;
 volatile uint8_t SpindlePWM;
-volatile
+volatile uint16_t OldWDTime[2];
 
 uint16_t WallClock;
 TOutputStatus Outputs;
@@ -49,7 +49,8 @@ ISR(PCINT0_vect) {
 
 /* External WatchDog */
 ISR(PCINT2_vect) {
-  /* DetectWatchDogPeriod */
+  OldWDTime[0] = OldWDTime[1];
+  OldWDTime[1] = WallClock;
 }
 
 /* E-Stop */
@@ -148,7 +149,9 @@ void SetChargePump(bool mode) {
 }
 
 void RunPeriodicTasks(void) {
-  /* We only use this for flashing LEDs right now, 1Hz and 4Hz */
+  uint16_t WDTDelta = OldWDTime[1] - OldWDTime[0];
+
+  /* Flashing LEDs */
   if(Outputs.flags.LPTLED || Outputs.flags.USBLED) {
     if((Outputs.flags.LPTLED == INTERFACE_LED_1HZ && !(WallClock & 0x3FFF)) ||
         (Outputs.flags.LPTLED == INTERFACE_LED_4HZ && !(WallClock & 0x0FFF)))
@@ -157,6 +160,12 @@ void RunPeriodicTasks(void) {
         (Outputs.flags.USBLED == INTERFACE_LED_4HZ && !(WallClock & 0x0FFF)))
       PIND = _BV(PORTD1);
   } /* Otherwise they're both off */
+
+  /* External WatchDog detection, between 10.922kHz and 16.384kHz */
+  if(WDTDelta > 1 && WDTDelta < 4 && !InterruptCauses.flags.WatchDogTrip)
+    SetFlagAndAssertInterrupt(INTERFACE_INTERRUPT_WDOGTRIP);
+  else if(!InterruptCauses.flags.WatchDogClear)
+    SetFlagAndAssertInterrupt(INTERFACE_INTERRUPT_WDOGCLEAR);
 }
 
 void init(void) {
@@ -197,6 +206,7 @@ void init(void) {
 
   /* Initialize state */
   NewCommand = false;
+  WDTDetect = false;
 
   /* And off we go */
   sei();
@@ -215,8 +225,9 @@ int main(void) {
             //TODO: add Master Control
             break;
           case (PROTOCOL_COMMAND_WAY | PROTOCOL_RCOMM):
-            SPIBuf[1] = 0x00; /* I_2013-1.1-aaa */
-            SPIBuf[2] = PROTOCOL_C_WAY_FI | 0x00; /* Interface MCU */
+            /* I_2013-1.1-aaa */
+            SPIBuf[1] = PROTOCOL_C_WAY_E2013 | PROTOCOL_C_WAY_MA1 | PROTOCOL_C_WAY_MI1;
+            SPIBuf[2] = PROTOCOL_C_WAY_FI | PROTOCOL_C_WAY_FWRa | PROTOCOL_C_WAY_HWRa | PROTOCOL_C_WAY_PCRa;
             break;
           case (PROTOCOL_COMMAND_WAY | PROTOCOL_RDATA):
             SPIBuf[1] = PROTOCOL_C_WAY_IS; /* Singleton, no indexing */
