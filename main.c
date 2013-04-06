@@ -80,8 +80,17 @@ ISR(INT0_vect) {
   }
 }
 
+/* ChargePump */
+ISR(TIMER0_COMPA_vect) {
+  /* Re-arm */
+  OCR0A = TCNT0 + INTERFACE_OCR_12KHZ;
+}
+
 /* SysTick */
 ISR(TIMER0_COMPB_vect) {
+  /* Re-arm */
+  OCR0B = TCNT0 + INTERFACE_OCR_32KHZ;
+
   WallClock++;
 
   RunPeriodicTasks();
@@ -145,8 +154,15 @@ void UpdateSpindlePWM(uint8_t newSpindlePWM) {
 }
 
 void SetChargePump(bool mode) {
-  if(mode) TCCR0B |= _BV(COM0A0);
-  else TCCR0B &= ~_BV(COM0A0);
+  if(mode) {
+    TCCR0A |= _BV(COM0A0);
+    TIFR |= _BV(OCF0A);
+    TIMSK |= _BV(OCIE0A);
+  }
+  else {
+    TCCR0A &= ~_BV(COM0A0);
+    TIMSK &= ~_BV(OCIE0A);
+  }
 }
 
 void RunPeriodicTasks(void) {
@@ -195,15 +211,15 @@ void init(void) {
   GIMSK |= _BV(INT0) | _BV(PCIE2) | _BV(PCIE0);
   /* Timer setup */
   /* Timer0.A: CPUMP output @ 12.5kHz 50% square wave) */
-  TCCR0A = _BV(WGM01);
-  OCR0A = F_CPU / 8 / (12500 * 2) - 1;
+  OCR0A = INTERFACE_OCR_12KHZ;
   /* Timer0.B: SysTick @ 32768Hz */
-  OCR0B = F_CPU / 8 / 32768 - 1;
-  TIFR |= _BV(OCF0B); /* Avoid spurious interrupts on startup */
-  TIMSK |= _BV(OCIE0B);
+  OCR0B = INTERFACE_OCR_32KHZ;
+  TIFR |= _BV(OCF0A) | _BV(OCF0B); /* Avoid spurious interrupts on startup */
+  TIMSK |= _BV(OCIE0A) | _BV(OCIE0B);
   TCCR0B = _BV(CS01);
   /* Timer1.A: Phase-correct PWM */
   TCCR1A = _BV(COM1A1) | _BV(WGM11) | _BV(WGM10);
+  TCCR1B = _BV(CS11);
 
   /* Initialize state */
   NewCommand = false;

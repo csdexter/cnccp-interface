@@ -30,6 +30,13 @@
 #define INTERFACE_LED_1HZ 0x02
 #define INTERFACE_LED_4HZ 0x03
 
+#define INTERFACE_TIMER_DIVISOR 8
+#define OCR_12500Hz(divisor) (F_CPU / (divisor) / (12500 * 2) - 1)
+#define OCR_32768Hz(divisor) (F_CPU / (divisor) / 32768 - 1)
+#define INTERFACE_OCR_12KHZ OCR_12500Hz(INTERFACE_TIMER_DIVISOR)
+#define INTERFACE_OCR_32KHZ OCR_32768Hz(INTERFACE_TIMER_DIVISOR)
+
+
 #if defined(__AVR_ATtiny2313A__)
 /* avr-libc is lame enough not to have a fully orthogonal vocabulary */
 /* On closer inspection, it would appear iotn2313a.h was copy-pasted from
