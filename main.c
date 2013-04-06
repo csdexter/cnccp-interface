@@ -23,7 +23,7 @@
 #include "spi.h"
 
 
-volatile bool NewCommand, WDTDetect;
+volatile bool NewCommand;
 volatile uint8_t SPIBuf[3], SPICount;
 volatile TInterruptFlags InterruptFlags, InterruptCauses;
 volatile TCrossbarStatus Crossbar;
@@ -87,6 +87,7 @@ ISR(TIMER0_COMPB_vect) {
   RunPeriodicTasks();
 }
 
+//TODO: this should now be generic enough to move to spi.c
 void SPI_Hook(bool when) {
   if(when == SPI_HOOK_AFTER) {
     SPICount = (SPICount < PROTOCOL_TRANSACTION_SIZE - 1) ? SPICount + 1 : 0;
@@ -206,7 +207,7 @@ void init(void) {
 
   /* Initialize state */
   NewCommand = false;
-  WDTDetect = false;
+  set_sleep_mode(SLEEP_MODE_IDLE);
 
   /* And off we go */
   sei();
@@ -218,91 +219,87 @@ int main(void) {
   while(true) {
     if(NewCommand) {
       NewCommand = false;
-        switch(SPIBuf[0]) {
-          //TODO: the implementation of the global commands could be generic enough to warrant moving to boilerplate
-          //-- begin global commands implementation --
-          case PROTOCOL_COMMAND_MAC:
-            //TODO: add Master Control
-            break;
-          case (PROTOCOL_COMMAND_WAY | PROTOCOL_RCOMM):
-            /* I_2013-1.1-aaa */
-            SPIBuf[1] = PROTOCOL_C_WAY_E2013 | PROTOCOL_C_WAY_MA1 | PROTOCOL_C_WAY_MI1;
-            SPIBuf[2] = PROTOCOL_C_WAY_FI | PROTOCOL_C_WAY_FWRa | PROTOCOL_C_WAY_HWRa | PROTOCOL_C_WAY_PCRa;
-            break;
-          case (PROTOCOL_COMMAND_WAY | PROTOCOL_RDATA):
-            SPIBuf[1] = PROTOCOL_C_WAY_IS; /* Singleton, no indexing */
-            break;
-          case (PROTOCOL_COMMAND_AYT | PROTOCOL_RCOMM):
-            SPIBuf[1] = _BV(PROTOCOL_C_AYT_YIA) |
-                (InterruptCauses.flags.EStopTrip ? 0 : _BV(PROTOCOL_C_AYT_ENVOK)) |
-                _BV(PROTOCOL_C_AYT_COMOK);
-            break;
-          case (PROTOCOL_COMMAND_AYT | PROTOCOL_RDATA):
-            SPIBuf[1] = 0xFF; /* We do not provide SYNC */
-            break;
-          case (PROTOCOL_COMMAND_AYT | PROTOCOL_WCOMM):
-            //TODO: implement "only you"
-            break;
-          case (PROTOCOL_COMMAND_AYT | PROTOCOL_WDATA):
-            break; /* We do not accept SYNC */
-          case (PROTOCOL_COMMAND_HLT | PROTOCOL_RCOMM):
-          case (PROTOCOL_COMMAND_HLT | PROTOCOL_RDATA):
-          case (PROTOCOL_COMMAND_HLT | PROTOCOL_WCOMM):
-            /* We do not intend to ever wake up */
-            cli();
-            /* Turn off SPINDLE and COOL */
-            Outputs.value = 0x00;
-            Outputs.flags.ChargePump = true;
-            UpdateOutputs(Outputs);
-            /* Turn off the stepper driver */
-            Outputs.flags.ChargePump = false;
-            UpdateOutputs(Outputs);
-            /* Isolate crossbar */
-            Crossbar.value = 0x00;
-            UpdateSwitch(Crossbar);
-            /* Shutdown */
-            set_sleep_mode(SLEEP_MODE_IDLE);
-            sleep_mode();
-            break;
-          case (PROTOCOL_COMMAND_HLT | PROTOCOL_WDATA):
-            cli();
-            set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-            sleep_mode();
-            break;
-          //-- end global commands implementation --
-          case (INTERFACE_COMMAND_INTERRUPT | PROTOCOL_RCOMM):
-            SPIBuf[1] = InterruptFlags.value;
-            break;
-          case (INTERFACE_COMMAND_INTERRUPT | PROTOCOL_RDATA):
-            SPIBuf[1] = (InterruptCauses.flags.EStopTrip ? _BV(7) : 0) |
-                (InterruptCauses.flags.WatchDogTrip ? _BV(6) : 0);
-            ClearFlagsAndReleaseInterrupt();
-            break;
-          case (INTERFACE_COMMAND_INTERRUPT | PROTOCOL_WCOMM):
-            InterruptFlags.value = SPIBuf[1];
-            break;
-          case (INTERFACE_COMMAND_OUTPUT | PROTOCOL_RCOMM):
-            SPIBuf[1] = Outputs.value;
-            break;
-          case (INTERFACE_COMMAND_OUTPUT | PROTOCOL_WCOMM):
-            if(Outputs.value != SPIBuf[1])
-              UpdateOutputs((TOutputStatus)SPIBuf[1]);
-            break;
-          case (INTERFACE_COMMAND_CROSSBAR | PROTOCOL_RCOMM):
-            SPIBuf[1] = Crossbar.value;
-            break;
-          case (INTERFACE_COMMAND_CROSSBAR | PROTOCOL_WCOMM):
-            if(Crossbar.value != SPIBuf[1])
-              UpdateSwitch((TCrossbarStatus)SPIBuf[1]);
-            break;
-          case (INTERFACE_COMMAND_SPINDLE | PROTOCOL_RDATA):
-            SPIBuf[1] = SpindlePWM;
-            break;
-          case (INTERFACE_COMMAND_SPINDLE | PROTOCOL_WDATA):
-            if(SpindlePWM != SPIBuf[1]) UpdateSpindlePWM(SPIBuf[1]);
-            break;
-        }
-    }
+      switch(SPIBuf[0]) {
+        //TODO: the implementation of the global commands could be generic enough to warrant moving to boilerplate
+        //-- begin global commands implementation --
+        case PROTOCOL_COMMAND_MAC:
+          //TODO: add Master Control
+          break;
+        case (PROTOCOL_COMMAND_WAY | PROTOCOL_RCOMM):
+          /* I_2013-1.1-aaa */
+          SPIBuf[1] = PROTOCOL_C_WAY_E2013 | PROTOCOL_C_WAY_MA1 | PROTOCOL_C_WAY_MI1;
+          SPIBuf[2] = PROTOCOL_C_WAY_FI | PROTOCOL_C_WAY_FWRa | PROTOCOL_C_WAY_HWRa | PROTOCOL_C_WAY_PCRa;
+          break;
+        case (PROTOCOL_COMMAND_WAY | PROTOCOL_RDATA):
+          SPIBuf[1] = PROTOCOL_C_WAY_IS; /* Singleton, no indexing */
+          break;
+        case (PROTOCOL_COMMAND_AYT | PROTOCOL_RCOMM):
+          SPIBuf[1] = _BV(PROTOCOL_C_AYT_YIA) |
+              (InterruptCauses.flags.EStopTrip ? 0 : _BV(PROTOCOL_C_AYT_ENVOK)) |
+              _BV(PROTOCOL_C_AYT_COMOK);
+          break;
+        case (PROTOCOL_COMMAND_AYT | PROTOCOL_RDATA):
+          SPIBuf[1] = 0xFF; /* We do not provide SYNC */
+          break;
+        case (PROTOCOL_COMMAND_AYT | PROTOCOL_WCOMM):
+          //TODO: implement "only you"
+          break;
+        case (PROTOCOL_COMMAND_AYT | PROTOCOL_WDATA):
+          break; /* We do not accept SYNC */
+        case (PROTOCOL_COMMAND_HLT | PROTOCOL_RCOMM):
+        case (PROTOCOL_COMMAND_HLT | PROTOCOL_RDATA):
+        case (PROTOCOL_COMMAND_HLT | PROTOCOL_WCOMM):
+          /* We do not intend to ever wake up */
+          cli();
+          /* Turn off SPINDLE and COOL */
+          Outputs.value = 0x00;
+          Outputs.flags.ChargePump = true;
+          UpdateOutputs(Outputs);
+          /* Turn off the stepper driver */
+          Outputs.flags.ChargePump = false;
+          UpdateOutputs(Outputs);
+          /* Isolate crossbar */
+          Crossbar.value = 0x00;
+          UpdateSwitch(Crossbar);
+          break;
+        case (PROTOCOL_COMMAND_HLT | PROTOCOL_WDATA):
+          cli();
+          set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+          break;
+        //-- end global commands implementation --
+        case (INTERFACE_COMMAND_INTERRUPT | PROTOCOL_RCOMM):
+          SPIBuf[1] = InterruptFlags.value;
+          break;
+        case (INTERFACE_COMMAND_INTERRUPT | PROTOCOL_RDATA):
+          SPIBuf[1] = (InterruptCauses.flags.EStopTrip ? _BV(7) : 0) |
+              (InterruptCauses.flags.WatchDogTrip ? _BV(6) : 0);
+          ClearFlagsAndReleaseInterrupt();
+          break;
+        case (INTERFACE_COMMAND_INTERRUPT | PROTOCOL_WCOMM):
+          InterruptFlags.value = SPIBuf[1];
+          break;
+        case (INTERFACE_COMMAND_OUTPUT | PROTOCOL_RCOMM):
+          SPIBuf[1] = Outputs.value;
+          break;
+        case (INTERFACE_COMMAND_OUTPUT | PROTOCOL_WCOMM):
+          if(Outputs.value != SPIBuf[1])
+            UpdateOutputs((TOutputStatus)SPIBuf[1]);
+          break;
+        case (INTERFACE_COMMAND_CROSSBAR | PROTOCOL_RCOMM):
+          SPIBuf[1] = Crossbar.value;
+          break;
+        case (INTERFACE_COMMAND_CROSSBAR | PROTOCOL_WCOMM):
+          if(Crossbar.value != SPIBuf[1])
+            UpdateSwitch((TCrossbarStatus)SPIBuf[1]);
+          break;
+        case (INTERFACE_COMMAND_SPINDLE | PROTOCOL_RDATA):
+          SPIBuf[1] = SpindlePWM;
+          break;
+        case (INTERFACE_COMMAND_SPINDLE | PROTOCOL_WDATA):
+          if(SpindlePWM != SPIBuf[1]) UpdateSpindlePWM(SPIBuf[1]);
+          break;
+      }
+    } else sleep_mode();
   }
 
   return 0;
