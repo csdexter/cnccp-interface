@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<?fileVersion 4.0.0?>
-
-<cproject storage_type_id="org.eclipse.cdt.core.XmlProjectDescriptionStorage">
+<?fileVersion 4.0.0?><cproject storage_type_id="org.eclipse.cdt.core.XmlProjectDescriptionStorage">
 	<storageModule moduleId="org.eclipse.cdt.core.settings">
 		<cconfiguration id="de.innot.avreclipse.configuration.app.debug.396903426">
 			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="de.innot.avreclipse.configuration.app.debug.396903426" moduleId="org.eclipse.cdt.core.settings" name="Debug">
@@ -88,6 +86,9 @@
 								<option id="de.innot.avreclipse.compiler.option.optimize.1212293505" name="Optimization Level" superClass="de.innot.avreclipse.compiler.option.optimize" value="de.innot.avreclipse.compiler.optimize.size" valueType="enumerated"/>
 								<option id="de.innot.avreclipse.compiler.option.std.2107279802" name="Language Standard" superClass="de.innot.avreclipse.compiler.option.std" value="de.innot.avreclipse.compiler.option.std.c99" valueType="enumerated"/>
 								<option id="de.innot.avreclipse.compiler.option.optimize.other.1827904661" name="Other Optimization Flags" superClass="de.innot.avreclipse.compiler.option.optimize.other" value="-ffunction-sections -fdata-sections" valueType="string"/>
+								<option id="de.innot.avreclipse.compiler.option.def.769970699" superClass="de.innot.avreclipse.compiler.option.def" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="DEBUG"/>
+								</option>
 								<inputType id="de.innot.avreclipse.compiler.winavr.input.1058434677" name="C Source Files" superClass="de.innot.avreclipse.compiler.winavr.input"/>
 							</tool>
 							<tool id="de.innot.avreclipse.tool.cppcompiler.app.release.1199237619" name="AVR C++ Compiler" superClass="de.innot.avreclipse.tool.cppcompiler.app.release">
@@ -130,4 +131,5 @@
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="de.innot.avreclipse.core.AVRGCCManagedMakePerProjectProfileC"/>
 		</scannerConfigBuildInfo>
 	</storageModule>
+	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
 </cproject>

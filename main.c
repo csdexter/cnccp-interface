@@ -20,6 +20,7 @@
 #include "boilerplate.h"
 #include "interface.h"
 #include "protocol.h"
+#include "serialdebug.h"
 #include "spi.h"
 
 
@@ -231,10 +232,16 @@ void init(void) {
 
 int main(void) {
   init();
+  host_serialconsole_init();
+  D('+');
 
   while(true) {
     if(NewCommand) {
       NewCommand = false;
+      D('N');
+      D(SPIBuf[0]+'!');
+      D(SPIBuf[1]+'!');
+      D(SPIBuf[2]+'!');
       switch(SPIBuf[0]) {
         //TODO: the implementation of the global commands could be generic enough to warrant moving to boilerplate
         //-- begin global commands implementation --
@@ -250,6 +257,7 @@ int main(void) {
           SPIBuf[1] = PROTOCOL_C_WAY_IS; /* Singleton, no indexing */
           break;
         case (PROTOCOL_COMMAND_AYT | PROTOCOL_RCOMM):
+          D('C');
           SPIBuf[1] = _BV(PROTOCOL_C_AYT_YIA) |
               (InterruptCauses.flags.EStopTrip ? 0 : _BV(PROTOCOL_C_AYT_ENVOK)) |
               _BV(PROTOCOL_C_AYT_COMOK);
