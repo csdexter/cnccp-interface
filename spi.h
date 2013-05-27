@@ -14,6 +14,9 @@
 #include <avr/io.h>
 #include <avr/power.h>
 
+/* Change this to match your application, the library will then emulate a
+ * SPI shift register PROTOCOL_TRANSACTION_SIZE bytes wide */
+#define PROTOCOL_TRANSACTION_SIZE 3 /* for Interface MCU */
 
 #define SPI_POWER_ON false
 #define SPI_POWER_OFF true
@@ -40,17 +43,12 @@
       SCK_DDR &= ~_BV(SCK_BIT); \
     }
 
-/* Starts SPI transaction: *tx gets sent out and *rx gets overwritten with
- * received data.
- * Call with NULL to signal you don't care about that side of the transaction.
+/* Starts a new SPI transaction: buf[0] gets sent out and then buf[0] gets
+ * overwritten with received data. The index then gets incremented until
+ * PROTOCOL_TRANSACTION_SIZE - 1 and the cycle repeats.
  * NOTE: if running in master mode, this will actually start sending the data,
  *       otherwise it just prepares it for when the master will start SCK */
-void spi_start(volatile uint8_t *rx, volatile uint8_t *tx);
-/* Callback function, called after each byte is received, before and after the
- * byte is stored in *rx. First invocation (before) is with false, second
- * (after) true. First invocation only occurs if rx is not NULL.
- * WARNING: this will be called in interrupt context */
-extern void(*spi_hook)(bool);
+void spi_start(volatile uint8_t *buf);
 
 #if defined(__AVR_ATmega328P__) /* Native SPI interface */
   #define SPI_LSB_FIRST true

@@ -14,26 +14,22 @@
 
 
 /* private variables */
-static volatile uint8_t *SPI_Rx_Buf;
+static volatile uint8_t *SPI_Buf;
+static volatile uint8_t SPI_Count;
 
 /* public API */
-void(*spi_hook)(bool);
+void spi_start(volatile uint8_t *buf) {
+  SPI_Count = 0;
+  SPI_Buf = buf;
 
-void spi_start(volatile uint8_t *rx, volatile uint8_t *tx) {
-  SPI_Rx_Buf = rx;
-  if(tx) spi_write(*tx);
-  else spi_write(0x00); /* Start the transaction */
+  spi_write(SPI_Buf[SPI_Count]);
 }
 
 ISR(SPI_INTERRUPT_NAME) {
-  uint8_t data;
-
-  data = spi_read(); /* Perform the read anyway and earliest to clear receive complete status */
+  SPI_Buf[SPI_Count] = spi_read(); /* Perform the read earliest to clear receive complete status */
   spi_int_ack();
-
-  if(SPI_Rx_Buf) {
-    if(spi_hook) spi_hook(SPI_HOOK_BEFORE);
-    *SPI_Rx_Buf = data;
-  }
-  if(spi_hook) spi_hook(SPI_HOOK_AFTER);
+#if PROTOCOL_TRANSACTION_SIZE > 1
+  SPI_Count = (SPI_Count < PROTOCOL_TRANSACTION_SIZE - 1) ? SPI_Count + 1 : 0;
+#endif
+  spi_write(SPI_Buf[SPI_Count]);
 }

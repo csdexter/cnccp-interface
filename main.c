@@ -25,7 +25,7 @@
 
 
 volatile bool NewCommand;
-volatile uint8_t SPIBuf[3], SPICount;
+volatile uint8_t SPIBuf[3];
 volatile TInterruptFlags InterruptFlags, InterruptCauses;
 volatile TCrossbarStatus Crossbar;
 volatile uint8_t SpindlePWM;
@@ -36,7 +36,6 @@ TOutputStatus Outputs;
 
 /* SPI SS# */
 ISR(PCINT0_vect) {
-  SPICount = 0;
   if(PINB & _BV(PORTB4)) {
     //TODO: in the future, we may want to error out if we haven't received exactly three bytes
     NewCommand = true;
@@ -44,7 +43,7 @@ ISR(PCINT0_vect) {
   } else {
     //TODO: in the future, we may want to error out if the last SPI transaction hasn't been processed yet
     spi_enable(SPI_ON);
-    spi_start(&SPIBuf[0], &SPIBuf[0]);
+    spi_start(SPIBuf);
   }
 }
 
@@ -95,14 +94,6 @@ ISR(TIMER0_COMPB_vect) {
   WallClock++;
 
   RunPeriodicTasks();
-}
-
-//TODO: this should now be generic enough to move to spi.c
-void SPI_Hook(bool when) {
-  if(when == SPI_HOOK_AFTER) {
-    SPICount = (SPICount < PROTOCOL_TRANSACTION_SIZE - 1) ? SPICount + 1 : 0;
-    spi_start(&SPIBuf[SPICount], &SPIBuf[SPICount]);
-  }
 }
 
 void SetFlagAndAssertInterrupt(uint8_t flag) {
@@ -199,7 +190,6 @@ void init(void) {
   PCMSK2 = _BV(PCINT17);
   /* MOSI, MISO and SCK configured by SPI */
   spi_configure(SPI_INT_ENABLE, SPI_OFF, NULL, SPI_SLAVE, NULL, SPI_PHASE_LEADING, NULL);
-  spi_hook = SPI_Hook;
   /* SS# on PB4, input and pin change interrupt
    * *_PWM on PB3/2, outputs
    * CS_*# on PB1/0, outputs
