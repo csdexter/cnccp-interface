@@ -36,24 +36,6 @@
 #define INTERFACE_OCR_12KHZ OCR_12500Hz(INTERFACE_TIMER_DIVISOR)
 #define INTERFACE_OCR_32KHZ OCR_32768Hz(INTERFACE_TIMER_DIVISOR)
 
-
-#if defined(__AVR_ATtiny2313A__)
-/* avr-libc is lame enough not to have a fully orthogonal vocabulary */
-/* On closer inspection, it would appear iotn2313a.h was copy-pasted from
- * iotn2312.h without much regard to the datasheet. How lame!
- */
-#define PCIE0 5
-#define PCIE1 4
-#define PCIE2 3
-#define GIFR EIFR
-#define PCIF0 5
-#define PCIF1 4
-#define PCIF2 3
-#define PCMSK0 PCMSK
-#define PCINT0_vect PCINT_B_vect
-#define PCINT2_vect PCINT_D_vect
-#endif
-
 typedef union {
   uint8_t value;
   struct {
